@@ -4,7 +4,14 @@ use std::str::{self, FromStr};
 use std::fmt;
 use std::cmp::Ordering::{self, Less, Greater, Equal};
 use std::{i64, u64};
-use std::ascii::AsciiExt;
+use ascii::*;
+
+#[cfg(not(feature = "std"))]
+use alloc::Vec;
+
+#[cfg(not(feature = "std"))]
+use alloc::String;
+
 
 #[cfg(feature = "serde")]
 use serde;
@@ -16,8 +23,8 @@ use serde;
 use rand::Rng;
 
 use integer::Integer;
-use traits::{ToPrimitive, FromPrimitive, Num, CheckedAdd, CheckedSub,
-             CheckedMul, CheckedDiv, Signed, Zero, One};
+use traits::{ToPrimitive, FromPrimitive, Num, CheckedAdd, CheckedSub, CheckedMul, CheckedDiv,
+             Signed, Zero, One};
 
 use self::Sign::{Minus, NoSign, Plus};
 
@@ -74,7 +81,8 @@ impl Mul<Sign> for Sign {
 #[cfg(feature = "serde")]
 impl serde::Serialize for Sign {
     fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
-        where S: serde::Serializer
+    where
+        S: serde::Serializer,
     {
         match *self {
             Sign::Minus => (-1i8).serialize(serializer),
@@ -87,7 +95,8 @@ impl serde::Serialize for Sign {
 #[cfg(feature = "serde")]
 impl serde::Deserialize for Sign {
     fn deserialize<D>(deserializer: &mut D) -> Result<Self, D::Error>
-        where D: serde::Deserializer
+    where
+        D: serde::Deserializer,
     {
         use serde::de::Error;
 
@@ -174,9 +183,17 @@ impl fmt::LowerHex for BigInt {
 
 impl fmt::UpperHex for BigInt {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.pad_integral(!self.is_negative(),
-                       "0x",
-                       &self.data.to_str_radix(16).to_ascii_uppercase())
+        f.pad_integral(
+            !self.is_negative(),
+            "0x",
+            &self.data
+                .to_str_radix(16)
+                .chars()
+                .map(|c| {
+                    c.to_ascii_char().unwrap().to_ascii_uppercase().as_char()
+                })
+                .collect::<String>(),
+        )
     }
 }
 
@@ -349,12 +366,14 @@ impl<'a, 'b> Add<&'b BigInt> for &'a BigInt {
 
     #[inline]
     fn add(self, other: &BigInt) -> BigInt {
-        bigint_add!(self,
-                    self.clone(),
-                    &self.data,
-                    other,
-                    other.clone(),
-                    &other.data)
+        bigint_add!(
+            self,
+            self.clone(),
+            &self.data,
+            other,
+            other.clone(),
+            &other.data
+        )
     }
 }
 
@@ -397,12 +416,13 @@ impl Add<BigDigit> for BigInt {
         match self.sign {
             NoSign => From::from(other),
             Plus => BigInt::from_biguint(Plus, self.data + other),
-            Minus =>
+            Minus => {
                 match self.data.cmp(&From::from(other)) {
                     Equal => Zero::zero(),
                     Less => BigInt::from_biguint(Plus, other - self.data),
                     Greater => BigInt::from_biguint(Minus, self.data - other),
                 }
+            }
         }
     }
 }
@@ -415,12 +435,13 @@ impl Add<DoubleBigDigit> for BigInt {
         match self.sign {
             NoSign => From::from(other),
             Plus => BigInt::from_biguint(Plus, self.data + other),
-            Minus =>
+            Minus => {
                 match self.data.cmp(&From::from(other)) {
                     Equal => Zero::zero(),
                     Less => BigInt::from_biguint(Plus, other - self.data),
                     Greater => BigInt::from_biguint(Minus, self.data - other),
                 }
+            }
         }
     }
 }
@@ -481,12 +502,14 @@ impl<'a, 'b> Sub<&'b BigInt> for &'a BigInt {
 
     #[inline]
     fn sub(self, other: &BigInt) -> BigInt {
-        bigint_sub!(self,
-                    self.clone(),
-                    &self.data,
-                    other,
-                    other.clone(),
-                    &other.data)
+        bigint_sub!(
+            self,
+            self.clone(),
+            &self.data,
+            other,
+            other.clone(),
+            &other.data
+        )
     }
 }
 
@@ -529,12 +552,13 @@ impl Sub<BigDigit> for BigInt {
         match self.sign {
             NoSign => BigInt::from_biguint(Minus, From::from(other)),
             Minus => BigInt::from_biguint(Minus, self.data + other),
-            Plus =>
+            Plus => {
                 match self.data.cmp(&From::from(other)) {
                     Equal => Zero::zero(),
                     Greater => BigInt::from_biguint(Plus, self.data - other),
                     Less => BigInt::from_biguint(Minus, other - self.data),
                 }
+            }
         }
     }
 }
@@ -556,12 +580,13 @@ impl Sub<DoubleBigDigit> for BigInt {
         match self.sign {
             NoSign => BigInt::from_biguint(Minus, From::from(other)),
             Minus => BigInt::from_biguint(Minus, self.data + other),
-            Plus =>
+            Plus => {
                 match self.data.cmp(&From::from(other)) {
                     Equal => Zero::zero(),
                     Greater => BigInt::from_biguint(Plus, self.data - other),
                     Less => BigInt::from_biguint(Minus, other - self.data),
                 }
+            }
         }
     }
 }
@@ -963,11 +988,7 @@ impl Integer for BigInt {
         let (d_ui, r_ui) = self.data.div_mod_floor(&other.data);
         let d = BigInt::from_biguint(self.sign, d_ui);
         let r = BigInt::from_biguint(self.sign, r_ui);
-        if other.is_negative() {
-            (-d, r)
-        } else {
-            (d, r)
-        }
+        if other.is_negative() { (-d, r) } else { (d, r) }
     }
 
     #[inline]
@@ -1080,23 +1101,19 @@ impl ToPrimitive for BigInt {
 
     #[inline]
     fn to_f32(&self) -> Option<f32> {
-        self.data.to_f32().map(|n| {
-            if self.sign == Minus {
-                -n
-            } else {
-                n
-            }
+        self.data.to_f32().map(|n| if self.sign == Minus {
+            -n
+        } else {
+            n
         })
     }
 
     #[inline]
     fn to_f64(&self) -> Option<f64> {
-        self.data.to_f64().map(|n| {
-            if self.sign == Minus {
-                -n
-            } else {
-                n
-            }
+        self.data.to_f64().map(|n| if self.sign == Minus {
+            -n
+        } else {
+            n
         })
     }
 }
@@ -1200,7 +1217,8 @@ impl From<BigUint> for BigInt {
 #[cfg(feature = "serde")]
 impl serde::Serialize for BigInt {
     fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
-        where S: serde::Serializer
+    where
+        S: serde::Serializer,
     {
         (self.sign, &self.data).serialize(serializer)
     }
@@ -1209,7 +1227,8 @@ impl serde::Serialize for BigInt {
 #[cfg(feature = "serde")]
 impl serde::Deserialize for BigInt {
     fn deserialize<D>(deserializer: &mut D) -> Result<Self, D::Error>
-        where D: serde::Deserializer
+    where
+        D: serde::Deserializer,
     {
         let (sign, data) = try!(serde::Deserialize::deserialize(deserializer));
         Ok(BigInt {
@@ -1250,9 +1269,9 @@ impl biguint::ToBigUint for BigInt {
     #[inline]
     fn to_biguint(&self) -> Option<BigUint> {
         match self.sign() {
-            Plus    => Some(self.data.clone()),
-            NoSign  => Some(Zero::zero()),
-            Minus   => None,
+            Plus => Some(self.data.clone()),
+            NoSign => Some(Zero::zero()),
+            Minus => None,
         }
     }
 }
@@ -1482,7 +1501,9 @@ impl BigInt {
     /// ```
     #[inline]
     pub fn parse_bytes(buf: &[u8], radix: u32) -> Option<BigInt> {
-        str::from_utf8(buf).ok().and_then(|s| BigInt::from_str_radix(s, radix).ok())
+        str::from_utf8(buf).ok().and_then(|s| {
+            BigInt::from_str_radix(s, radix).ok()
+        })
     }
 
     /// Creates and initializes a `BigInt`. Each u8 of the input slice is
@@ -1593,7 +1614,9 @@ impl BigInt {
     pub fn to_signed_bytes_le(&self) -> Vec<u8> {
         let mut bytes = self.data.to_bytes_le();
         let last_byte = bytes.last().map(|v| *v).unwrap_or(0);
-        if last_byte > 0x7f && !(last_byte == 0x80 && bytes.iter().rev().skip(1).all(Zero::is_zero)) {
+        if last_byte > 0x7f &&
+            !(last_byte == 0x80 && bytes.iter().rev().skip(1).all(Zero::is_zero))
+        {
             // msb used by magnitude, extend by 1 byte
             bytes.push(0);
         }
@@ -1739,7 +1762,8 @@ fn twos_complement_be(digits: &mut [u8]) {
 /// starting from the least significant byte.
 #[inline]
 fn twos_complement<'a, I>(digits: I)
-    where I: IntoIterator<Item = &'a mut u8>
+where
+    I: IntoIterator<Item = &'a mut u8>,
 {
     let mut carry = true;
     for mut d in digits {

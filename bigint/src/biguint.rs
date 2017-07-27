@@ -1,4 +1,8 @@
+#[cfg(feature = "std")]
 use std::borrow::Cow;
+#[cfg(not(feature = "std"))]
+use alloc::borrow::Cow;
+
 use std::default::Default;
 use std::iter::repeat;
 use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Rem, Shl, Shr, Sub};
@@ -8,7 +12,13 @@ use std::cmp;
 use std::cmp::Ordering::{self, Less, Greater, Equal};
 use std::{f32, f64};
 use std::{u8, u64};
-use std::ascii::AsciiExt;
+use ascii::*;
+
+#[cfg(not(feature = "std"))]
+use alloc::Vec;
+
+#[cfg(not(feature = "std"))]
+use alloc::String;
 
 #[cfg(feature = "serde")]
 use serde;
@@ -91,7 +101,16 @@ impl fmt::LowerHex for BigUint {
 
 impl fmt::UpperHex for BigUint {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.pad_integral(true, "0x", &self.to_str_radix(16).to_ascii_uppercase())
+        f.pad_integral(
+            true,
+            "0x",
+            &self.to_str_radix(16)
+                .chars()
+                .map(|c| {
+                    c.to_ascii_char().unwrap().to_ascii_uppercase().as_char()
+                })
+                .collect::<String>(),
+        )
     }
 }
 
@@ -125,10 +144,13 @@ fn from_bitwise_digits_le(v: &[u8], bits: usize) -> BigUint {
     let digits_per_big_digit = big_digit::BITS / bits;
 
     let data = v.chunks(digits_per_big_digit)
-                .map(|chunk| {
-                    chunk.iter().rev().fold(0, |acc, &c| (acc << bits) | c as BigDigit)
-                })
-                .collect();
+        .map(|chunk| {
+            chunk.iter().rev().fold(
+                0,
+                |acc, &c| (acc << bits) | c as BigDigit,
+            )
+        })
+        .collect();
 
     BigUint::new(data)
 }
@@ -182,11 +204,7 @@ fn from_radix_digits_be(v: &[u8], radix: u32) -> BigUint {
     let radix = radix as BigDigit;
 
     let r = v.len() % power;
-    let i = if r == 0 {
-        power
-    } else {
-        r
-    };
+    let i = if r == 0 { power } else { r };
     let (head, tail) = v.split_at(i);
 
     let first = head.iter().fold(0, |acc, &d| acc * radix + d as BigDigit);
@@ -627,7 +645,9 @@ impl Div<BigUint> for DoubleBigDigit {
         match other.data.len() {
             0 => panic!(),
             1 => From::from(self / other.data[0] as u64),
-            2 => From::from(self / big_digit::to_doublebigdigit(other.data[1], other.data[0])),
+            2 => From::from(
+                self / big_digit::to_doublebigdigit(other.data[1], other.data[0]),
+            ),
             _ => Zero::zero(),
         }
     }
@@ -667,7 +687,7 @@ impl Rem<BigUint> for BigDigit {
         match other.data.len() {
             0 => panic!(),
             1 => From::from(self % other.data[0]),
-            _ => From::from(self)
+            _ => From::from(self),
         }
     }
 }
@@ -690,7 +710,9 @@ impl Rem<BigUint> for DoubleBigDigit {
         match other.data.len() {
             0 => panic!(),
             1 => From::from(self % other.data[0] as u64),
-            2 => From::from(self % big_digit::to_doublebigdigit(other.data[0], other.data[1])),
+            2 => From::from(
+                self % big_digit::to_doublebigdigit(other.data[0], other.data[1]),
+            ),
             _ => From::from(self),
         }
     }
@@ -825,9 +847,9 @@ impl Integer for BigUint {
 
 fn high_bits_to_u64(v: &BigUint) -> u64 {
     match v.data.len() {
-        0   => 0,
-        1   => v.data[0] as u64,
-        _   => {
+        0 => 0,
+        1 => v.data[0] as u64,
+        _ => {
             let mut bits = v.bits();
             let mut ret = 0u64;
             let mut ret_bits = 0;
@@ -839,9 +861,9 @@ fn high_bits_to_u64(v: &BigUint) -> u64 {
                 if bits_want != 64 {
                     ret <<= bits_want;
                 }
-                ret      |= *d as u64 >> (digit_bits - bits_want);
+                ret |= *d as u64 >> (digit_bits - bits_want);
                 ret_bits += bits_want;
-                bits     -= bits_want;
+                bits -= bits_want;
 
                 if ret_bits == 64 {
                     break;
@@ -858,11 +880,7 @@ impl ToPrimitive for BigUint {
     fn to_i64(&self) -> Option<i64> {
         self.to_u64().and_then(|n| {
             // If top bit of u64 is set, it's too large to convert to i64.
-            if n >> 63 == 0 {
-                Some(n as i64)
-            } else {
-                None
-            }
+            if n >> 63 == 0 { Some(n as i64) } else { None }
         })
     }
 
@@ -892,11 +910,7 @@ impl ToPrimitive for BigUint {
             None
         } else {
             let ret = (mantissa as f32) * 2.0f32.powi(exponent as i32);
-            if ret.is_infinite() {
-                None
-            } else {
-                Some(ret)
-            }
+            if ret.is_infinite() { None } else { Some(ret) }
         }
     }
 
@@ -909,11 +923,7 @@ impl ToPrimitive for BigUint {
             None
         } else {
             let ret = (mantissa as f64) * 2.0f64.powi(exponent as i32);
-            if ret.is_infinite() {
-                None
-            } else {
-                Some(ret)
-            }
+            if ret.is_infinite() { None } else { Some(ret) }
         }
     }
 }
@@ -1245,7 +1255,9 @@ impl BigUint {
     /// ```
     #[inline]
     pub fn parse_bytes(buf: &[u8], radix: u32) -> Option<BigUint> {
-        str::from_utf8(buf).ok().and_then(|s| BigUint::from_str_radix(s, radix).ok())
+        str::from_utf8(buf).ok().and_then(|s| {
+            BigUint::from_str_radix(s, radix).ok()
+        })
     }
 
     /// Creates and initializes a `BigUint`. Each u8 of the input slice is
@@ -1265,7 +1277,10 @@ impl BigUint {
     /// assert_eq!(a.to_radix_be(190), inbase190);
     /// ```
     pub fn from_radix_be(buf: &[u8], radix: u32) -> Option<BigUint> {
-        assert!(2 <= radix && radix <= 256, "The radix must be within 2...256");
+        assert!(
+            2 <= radix && radix <= 256,
+            "The radix must be within 2...256"
+        );
 
         if radix != 256 && buf.iter().any(|&b| b >= radix as u8) {
             return None;
@@ -1305,7 +1320,10 @@ impl BigUint {
     /// assert_eq!(a.to_radix_be(190), inbase190);
     /// ```
     pub fn from_radix_le(buf: &[u8], radix: u32) -> Option<BigUint> {
-        assert!(2 <= radix && radix <= 256, "The radix must be within 2...256");
+        assert!(
+            2 <= radix && radix <= 256,
+            "The radix must be within 2...256"
+        );
 
         if radix != 256 && buf.iter().any(|&b| b >= radix as u8) {
             return None;
@@ -1447,7 +1465,8 @@ impl BigUint {
 #[cfg(feature = "serde")]
 impl serde::Serialize for BigUint {
     fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
-        where S: serde::Serializer
+    where
+        S: serde::Serializer,
     {
         self.data.serialize(serializer)
     }
@@ -1456,7 +1475,8 @@ impl serde::Serialize for BigUint {
 #[cfg(feature = "serde")]
 impl serde::Deserialize for BigUint {
     fn deserialize<D>(deserializer: &mut D) -> Result<Self, D::Error>
-        where D: serde::Deserializer
+    where
+        D: serde::Deserializer,
     {
         let data = try!(Vec::deserialize(deserializer));
         Ok(BigUint { data: data })
@@ -1466,7 +1486,10 @@ impl serde::Deserialize for BigUint {
 /// Returns the greatest power of the radix <= big_digit::BASE
 #[inline]
 fn get_radix_base(radix: u32) -> (BigDigit, usize) {
-    debug_assert!(2 <= radix && radix <= 256, "The radix must be within 2...256");
+    debug_assert!(
+        2 <= radix && radix <= 256,
+        "The radix must be within 2...256"
+    );
     debug_assert!(!radix.is_power_of_two());
 
     // To generate this table:
@@ -1497,7 +1520,7 @@ fn get_radix_base(radix: u32) -> (BigDigit, usize) {
     //        println!("({:20}, {:2}), // {:2}", base, power, radix);
     //    }
     match big_digit::BITS {
-        32  => {
+        32 => {
             const BASES: [(u32, usize); 257] = [
                 (         0,  0),
                 (         0,  0),
@@ -1761,7 +1784,7 @@ fn get_radix_base(radix: u32) -> (BigDigit, usize) {
             let (base, power) = BASES[radix as usize];
             (base as BigDigit, power)
         }
-        64  => {
+        64 => {
             const BASES: [(u64, usize); 257] = [
                 (                   0,  0),
                 (                   0,  0),
@@ -2025,6 +2048,6 @@ fn get_radix_base(radix: u32) -> (BigDigit, usize) {
             let (base, power) = BASES[radix as usize];
             (base as BigDigit, power)
         }
-        _   => panic!("Invalid bigdigit size")
+        _ => panic!("Invalid bigdigit size"),
     }
 }

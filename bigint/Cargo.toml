@@ -32,8 +32,13 @@ version = "0.3.19"
 optional = true
 version = ">= 0.7.0, < 0.9.0"
 
+[dependencies.ascii]
+version = "0.8"
+default-features = false
+
 [dev-dependencies.rand]
 version = "0.3.14"
 
 [features]
-default = ["rand", "rustc-serialize"]
+default = ["std", "rand", "rustc-serialize"]
+std = []

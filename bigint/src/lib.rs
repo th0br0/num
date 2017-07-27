@@ -73,6 +73,8 @@
        html_favicon_url = "https://rust-num.github.io/num/favicon.ico",
        html_root_url = "https://rust-num.github.io/num/",
        html_playground_url = "http://play.integer32.com/")]
+#![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(not(feature = "std"), feature(alloc))]
 
 #[cfg(any(feature = "rand", test))]
 extern crate rand;
@@ -81,10 +83,21 @@ extern crate rustc_serialize;
 #[cfg(feature = "serde")]
 extern crate serde;
 
+extern crate ascii;
+
 extern crate num_integer as integer;
 extern crate num_traits as traits;
 
+#[cfg(not(feature = "std"))]
+extern crate core as std;
+
+#[cfg(not(feature = "std"))]
+#[macro_use]
+extern crate alloc;
+
+#[cfg(feature = "std")]
 use std::error::Error;
+
 use std::num::ParseIntError;
 use std::fmt;
 
@@ -113,6 +126,7 @@ impl fmt::Display for ParseBigIntError {
     }
 }
 
+#[cfg(feature = "std")]
 impl Error for ParseBigIntError {
     fn description(&self) -> &str {
         "failed to parse bigint/biguint"

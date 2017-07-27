@@ -1,10 +1,17 @@
+#[cfg(feature = "std")]
 use std::borrow::Cow;
+#[cfg(not(feature = "std"))]
+use alloc::borrow::Cow;
+
 use std::cmp;
 use std::cmp::Ordering::{self, Less, Greater, Equal};
 use std::iter::repeat;
 use std::mem;
 use traits;
 use traits::{Zero, One};
+
+#[cfg(not(feature = "std"))]
+use alloc::Vec;
 
 use biguint::BigUint;
 
