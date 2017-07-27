@@ -13,10 +13,17 @@
        html_favicon_url = "https://rust-num.github.io/num/favicon.ico",
        html_root_url = "https://rust-num.github.io/num/",
        html_playground_url = "http://play.integer32.com/")]
+#![no_std]
+
+#[cfg(test)]
+#[macro_use]
+extern crate std;
+#[cfg(test)]
+use std::vec::Vec;
 
 extern crate num_traits as traits;
 
-use std::ops::Add;
+use core::ops::Add;
 
 use traits::{Num, Signed};
 
@@ -269,7 +276,7 @@ macro_rules! impl_integer_for_isize {
 
                 while m != 0 {
                     m >>= m.trailing_zeros();
-                    if n > m { ::std::mem::swap(&mut n, &mut m) }
+                    if n > m { ::core::mem::swap(&mut n, &mut m) }
                     m -= n;
                 }
 
@@ -391,7 +398,7 @@ macro_rules! impl_integer_for_isize {
             fn test_gcd_cmp_with_euclidean() {
                 fn euclidean_gcd(mut m: $T, mut n: $T) -> $T {
                     while m != 0 {
-                        ::std::mem::swap(&mut m, &mut n);
+                        ::core::mem::swap(&mut m, &mut n);
                         m %= n;
                     }
 
@@ -528,7 +535,7 @@ macro_rules! impl_integer_for_usize {
 
                 while m != 0 {
                     m >>= m.trailing_zeros();
-                    if n > m { ::std::mem::swap(&mut n, &mut m) }
+                    if n > m { ::core::mem::swap(&mut n, &mut m) }
                     m -= n;
                 }
 
@@ -602,7 +609,7 @@ macro_rules! impl_integer_for_usize {
             fn test_gcd_cmp_with_euclidean() {
                 fn euclidean_gcd(mut m: $T, mut n: $T) -> $T {
                     while m != 0 {
-                        ::std::mem::swap(&mut m, &mut n);
+                        ::core::mem::swap(&mut m, &mut n);
                         m %= n;
                     }
                     n
