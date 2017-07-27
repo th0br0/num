@@ -3,6 +3,7 @@ use std::borrow::Cow;
 #[cfg(not(feature = "std"))]
 use alloc::borrow::Cow;
 
+use std::intrinsics::{ceilf64, truncf64, log2f64};
 use std::default::Default;
 use std::iter::repeat;
 use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Rem, Shl, Shr, Sub};
@@ -196,8 +197,8 @@ fn from_radix_digits_be(v: &[u8], radix: u32) -> BigUint {
     debug_assert!(v.iter().all(|&c| (c as u32) < radix));
 
     // Estimate how big the result will be, so we can pre-allocate it.
-    let bits = (radix as f64).log(2_f64) * v.len() as f64;
-    let big_digits = (bits / big_digit::BITS as f64).ceil();
+    let bits = unsafe { log2f64(radix as f64) * v.len() as f64 };
+    let big_digits = unsafe { ceilf64(bits / big_digit::BITS as f64) };
     let mut data = Vec::with_capacity(big_digits as usize);
 
     let (base, power) = get_radix_base(radix);
@@ -945,7 +946,32 @@ impl FromPrimitive for BigUint {
 
     #[inline]
     fn from_f64(mut n: f64) -> Option<BigUint> {
-        None
+        // handle NAN, INFINITY, NEG_INFINITY
+        if !n.is_finite() {
+            return None;
+        }
+
+        // match the rounding of casting from float to int
+        n = unsafe { truncf64(n) };
+
+        // handle 0.x, -0.x
+        if n.is_zero() {
+            return Some(BigUint::zero());
+        }
+
+        let (mantissa, exponent, sign) = Float::integer_decode(n);
+
+        if sign == -1 {
+            return None;
+        }
+
+        let mut ret = BigUint::from(mantissa);
+        if exponent > 0 {
+            ret = ret << exponent as usize;
+        } else if exponent < 0 {
+            ret = ret >> (-exponent) as usize;
+        }
+        Some(ret)
     }
 }
 
@@ -1088,7 +1114,7 @@ fn to_radix_digits_le(u: &BigUint, radix: u32) -> Vec<u8> {
     debug_assert!(!u.is_zero() && !radix.is_power_of_two());
 
     // Estimate how big the result will be, so we can pre-allocate it.
-    let radix_digits = ((u.bits() as f64) / (radix as f64).log(2_f64)).ceil();
+    let radix_digits = unsafe { ceilf64((u.bits() as f64) / log2f64(radix as f64)) };
     let mut res = Vec::with_capacity(radix_digits as usize);
     let mut digits = u.clone();
 

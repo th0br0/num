@@ -75,6 +75,7 @@
        html_playground_url = "http://play.integer32.com/")]
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(not(feature = "std"), feature(alloc))]
+#![feature(core_intrinsics)]
 
 #[cfg(any(feature = "rand", test))]
 extern crate rand;
